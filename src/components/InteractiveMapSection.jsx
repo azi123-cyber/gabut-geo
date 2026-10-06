@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { destinations, regions } from '../data/tourismData';
-import { MapPin, Layers, Compass, Eye, Search, Mountain, Award } from 'lucide-react';
+import { destinations, regions, matchesSearch, normalizeText } from '../data/tourismData';
+import { MapPin, Layers, Compass, Eye, Search, Award } from 'lucide-react';
 
 // Custom Map Marker styling using SVG DivIcon for ultra-crisp modern look
 const createCustomMarker = (type, isDSP) => {
@@ -44,7 +44,7 @@ const createCustomMarker = (type, isDSP) => {
   });
 };
 
-// Map View Controller to smoothly fly to regions
+// Map View Controller to smoothly fly to regions or specific destinations
 const MapController = ({ center, zoom }) => {
   const map = useMap();
   useEffect(() => {
@@ -78,35 +78,73 @@ const regionBounds = {
   sumatra: { center: [0.5, 101.5], zoom: 6 },
   jawa: { center: [-7.5, 111.0], zoom: 7 },
   bali_nusra: { center: [-8.6, 118.5], zoom: 7 },
-  kalimantan: { center: [0.0, 114.0], zoom: 6 },
+  kalimantan: { center: [-1.0, 114.0], zoom: 6 },
   sulawesi: { center: [-1.5, 121.5], zoom: 6 },
   maluku_papua: { center: [-3.5, 134.0], zoom: 6 }
 };
 
-const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCategory }) => {
+const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCategory, targetDestination }) => {
   const [activeCategory, setActiveCategory] = useState(selectedCategory || 'Semua');
   const [currentLayerKey, setCurrentLayerKey] = useState('topo');
   const [currentRegion, setCurrentRegion] = useState('all');
-  const [localSearch, setLocalSearch] = useState('');
+  const [localSearch, setLocalSearch] = useState(searchQuery || '');
+  const [mapTarget, setMapTarget] = useState(regionBounds.all);
 
-  // Sync with prop changes if passed from Hero/Navbar
+  // Sync with prop changes
   useEffect(() => {
     if (selectedCategory) setActiveCategory(selectedCategory);
   }, [selectedCategory]);
 
   useEffect(() => {
-    if (searchQuery) setLocalSearch(searchQuery);
+    if (searchQuery !== undefined) {
+      setLocalSearch(searchQuery);
+      
+      // Auto-detect if user searched for an island/region
+      const qNorm = normalizeText(searchQuery);
+      if (qNorm.includes('sumatra')) {
+        setCurrentRegion('sumatra');
+        setMapTarget(regionBounds.sumatra);
+      } else if (qNorm.includes('jawa')) {
+        setCurrentRegion('jawa');
+        setMapTarget(regionBounds.jawa);
+      } else if (qNorm.includes('bali') || qNorm.includes('nusa tenggara') || qNorm.includes('lombok') || qNorm.includes('flores')) {
+        setCurrentRegion('bali_nusra');
+        setMapTarget(regionBounds.bali_nusra);
+      } else if (qNorm.includes('kalimantan') || qNorm.includes('borneo')) {
+        setCurrentRegion('kalimantan');
+        setMapTarget(regionBounds.kalimantan);
+      } else if (qNorm.includes('sulawesi') || qNorm.includes('celebes')) {
+        setCurrentRegion('sulawesi');
+        setMapTarget(regionBounds.sulawesi);
+      } else if (qNorm.includes('papua') || qNorm.includes('maluku')) {
+        setCurrentRegion('maluku_papua');
+        setMapTarget(regionBounds.maluku_papua);
+      }
+    }
   }, [searchQuery]);
+
+  // When a specific targetDestination is selected from Catalog/Table
+  useEffect(() => {
+    if (targetDestination) {
+      setMapTarget({
+        center: [targetDestination.lat, targetDestination.lng],
+        zoom: 9
+      });
+    }
+  }, [targetDestination]);
+
+  const handleRegionClick = (regKey) => {
+    setCurrentRegion(regKey);
+    setMapTarget(regionBounds[regKey]);
+  };
 
   const categories = ['Semua', 'Bahari', 'Geowisata', 'Budaya', 'Ekowisata', 'Alam'];
 
   const filteredDestinations = destinations.filter(dest => {
     const matchCategory = activeCategory === 'Semua' || dest.type === activeCategory;
-    const matchSearch = localSearch === '' || 
-      dest.name.toLowerCase().includes(localSearch.toLowerCase()) ||
-      dest.province.toLowerCase().includes(localSearch.toLowerCase()) ||
-      dest.strategicPotential.toLowerCase().includes(localSearch.toLowerCase());
-    return matchCategory && matchSearch;
+    const matchRegion = currentRegion === 'all' || dest.regionId === currentRegion;
+    const matchSearch = matchesSearch(dest, localSearch);
+    return matchCategory && matchRegion && matchSearch;
   });
 
   return (
@@ -117,13 +155,13 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
         <div className="text-center max-w-3xl mx-auto mb-10">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-semibold mb-3 border border-emerald-500/30">
             <Compass className="w-4 h-4 mr-1.5" />
-            GIS & Analisis Spasial Pariwisata Nusantara
+            GIS & Analisis Spasial Pariwisata Nusantara (Bebas Watermark)
           </div>
           <h2 className="text-3xl sm:text-5xl font-serif font-bold text-white mb-4">
-            Peta Geografis & Sebaran <span className="text-nusantara-gold">Nilai Strategis</span>
+            Peta Geografis & Sebaran <span className="text-amber-400">Potensi Wilayah</span>
           </h2>
           <p className="text-gray-300 text-base sm:text-lg leading-relaxed">
-            Eksplorasi posisi geografis, batas bentang alam, serta nilai strategis geologis tiap destinasi di seluruh kepulauan Indonesia. Peta interaktif bebas watermark & siap dipakai tugas geografi.
+            Eksplorasi posisi geografis, batas bentang alam, serta nilai strategis geologis tiap destinasi di seluruh kepulauan Indonesia.
           </p>
         </div>
 
@@ -137,10 +175,10 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
               <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Cari lokasi, provinsi, atau kata kunci geografi..."
+                placeholder="Cari lokasi, provinsi, atau kata kunci (cth: Sumatra, Toba)..."
                 value={localSearch}
                 onChange={(e) => setLocalSearch(e.target.value)}
-                className="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-nusantara-emerald transition-colors"
+                className="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-emerald-500 transition-colors"
               />
               {localSearch && (
                 <button 
@@ -155,7 +193,7 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
             {/* Basemap Switcher */}
             <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto pb-1 lg:pb-0">
               <div className="flex items-center text-xs text-gray-400 font-medium mr-1 whitespace-nowrap">
-                <Layers className="w-4 h-4 mr-1 text-nusantara-gold" /> Tipe Peta:
+                <Layers className="w-4 h-4 mr-1 text-amber-400" /> Tipe Peta:
               </div>
               {Object.entries(tileLayers).map(([key, layer]) => (
                 <button
@@ -163,7 +201,7 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
                   onClick={() => setCurrentLayerKey(key)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                     currentLayerKey === key
-                      ? 'bg-nusantara-emerald text-white shadow-md'
+                      ? 'bg-emerald-600 text-white shadow-md'
                       : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
                   }`}
                 >
@@ -178,7 +216,7 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60">
             <span className="text-xs text-gray-400 font-medium mr-1">Fokus Wilayah:</span>
             <button
-              onClick={() => setCurrentRegion('all')}
+              onClick={() => handleRegionClick('all')}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                 currentRegion === 'all' ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-700/80 text-gray-300 hover:bg-slate-700'
               }`}
@@ -188,9 +226,9 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
             {regions.map((reg) => (
               <button
                 key={reg.id}
-                onClick={() => setCurrentRegion(reg.id)}
+                onClick={() => handleRegionClick(reg.id)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  currentRegion === reg.id ? 'bg-nusantara-emerald text-white font-bold' : 'bg-slate-700/80 text-gray-300 hover:bg-slate-700'
+                  currentRegion === reg.id ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-700/80 text-gray-300 hover:bg-slate-700'
                 }`}
               >
                 {reg.name}
@@ -224,15 +262,15 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
         {/* Map Container */}
         <div className="w-full h-[650px] rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-700/60 relative z-10">
           <MapContainer
-            center={regionBounds[currentRegion].center}
-            zoom={regionBounds[currentRegion].zoom}
+            center={mapTarget.center}
+            zoom={mapTarget.zoom}
             scrollWheelZoom={false}
             className="w-full h-full"
             zoomControl={false}
           >
             <MapController 
-              center={regionBounds[currentRegion].center} 
-              zoom={regionBounds[currentRegion].zoom} 
+              center={mapTarget.center} 
+              zoom={mapTarget.zoom} 
             />
 
             <TileLayer
@@ -267,7 +305,7 @@ const InteractiveMapSection = ({ onSelectDestination, searchQuery, selectedCateg
                     
                     <p className="text-xs text-gray-500 flex items-center mt-0.5 mb-2">
                       <MapPin className="w-3 h-3 mr-1 text-emerald-600 flex-shrink-0" />
-                      {dest.province} • {dest.elevation}
+                      {dest.regionName} • {dest.province}
                     </p>
 
                     <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs text-gray-700 mb-3 space-y-1.5">

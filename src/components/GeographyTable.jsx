@@ -1,33 +1,38 @@
-import React, { useState } from 'react';
-import { destinations } from '../data/tourismData';
-import { BookOpen, Search, Filter, Copy, Check, ExternalLink, MapPin, Award } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { destinations, regions, matchesSearch } from '../data/tourismData';
+import { BookOpen, Search, Copy, Check, ExternalLink, MapPin, Award, RotateCcw } from 'lucide-react';
 
-const GeographyTable = ({ onSelectDestination }) => {
+const GeographyTable = ({ onSelectDestination, externalSearchQuery }) => {
   const [filterRegion, setFilterRegion] = useState('all');
   const [filterType, setFilterType] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(externalSearchQuery || '');
   const [copiedId, setCopiedId] = useState(null);
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchTerm(externalSearchQuery);
+    }
+  }, [externalSearchQuery]);
 
   const filteredData = destinations.filter((item) => {
     const matchRegion = filterRegion === 'all' || item.regionId === filterRegion;
     const matchType = filterType === 'all' || item.type === filterType;
-    const matchSearch = searchTerm === '' ||
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.province.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.locationDesc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.strategicPotential.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = matchesSearch(item, searchTerm);
     return matchRegion && matchType && matchSearch;
   });
 
   const handleCopyText = (item) => {
     const text = `
 Nama Pariwisata: ${item.name}
-Provinsi & Koordinat: ${item.province} (${item.lat}°, ${item.lng}°) - Ketinggian: ${item.elevation}
+Wilayah: ${item.regionName} (${item.province})
+Koordinat & Elevasi: ${item.lat.toFixed(4)}°, ${item.lng.toFixed(4)}° (${item.elevation})
+Kategori: ${item.type}
 Letak Geografis: ${item.locationDesc}
-Kondisi Geologis: ${item.geologicalContext}
-Nilai Strategis: ${item.strategicPotential}
-Dampak Ekonomi: ${item.economicImpact}
+Kondisi Geologis & Bentang Alam: ${item.geologicalContext}
+Nilai Strategis Kewilayahan: ${item.strategicPotential}
+Dampak Ekonomi Lokal: ${item.economicImpact}
 Aksesibilitas: ${item.accessibility}
+Waktu/Musim Terbaik: ${item.bestSeason}
     `.trim();
 
     navigator.clipboard.writeText(text);
@@ -43,7 +48,7 @@ Aksesibilitas: ${item.accessibility}
         <div className="text-center max-w-3xl mx-auto mb-10">
           <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-blue-100 text-blue-800 text-xs font-bold mb-3">
             <BookOpen className="w-4 h-4 mr-1.5 text-blue-600" />
-            Matriks Kajian Khusus Tugas Geografi
+            Matriks Kajian Lengkap Tugas Geografi ({destinations.length} Objek)
           </div>
           <h2 className="text-3xl sm:text-4xl font-serif font-bold text-gray-900 mb-4">
             Tabel Analisis Letak & <span className="text-emerald-700">Nilai Strategis Wilayah</span>
@@ -59,11 +64,19 @@ Aksesibilitas: ${item.accessibility}
             <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari destinasi atau letak wilayah..."
+              placeholder="Cari destinasi atau letak wilayah (cth: Sumatra)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-300 rounded-xl pl-10 pr-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              className="w-full bg-gray-50 border border-gray-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -71,22 +84,19 @@ Aksesibilitas: ${item.accessibility}
             <select
               value={filterRegion}
               onChange={(e) => setFilterRegion(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="all">Semua Pulau / Zona</option>
-              <option value="sumatra">Sumatra</option>
-              <option value="jawa">Jawa</option>
-              <option value="bali_nusra">Bali & Nusa Tenggara</option>
-              <option value="kalimantan">Kalimantan</option>
-              <option value="sulawesi">Sulawesi</option>
-              <option value="maluku_papua">Maluku & Papua</option>
+              <option value="all">Semua Pulau / Zona ({destinations.length})</option>
+              {regions.map(r => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
             </select>
 
             {/* Filter Kategori */}
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="all">Semua Kategori</option>
               <option value="Geowisata">Geowisata & Vulkanik</option>
@@ -95,6 +105,16 @@ Aksesibilitas: ${item.accessibility}
               <option value="Ekowisata">Ekowisata & Konservasi</option>
               <option value="Alam">Bentang Alam</option>
             </select>
+
+            {(searchTerm || filterRegion !== 'all' || filterType !== 'all') && (
+              <button
+                onClick={() => { setSearchTerm(''); setFilterRegion('all'); setFilterType('all'); }}
+                className="p-2.5 text-gray-500 hover:text-emerald-700 text-xs font-semibold flex items-center"
+                title="Reset Filter"
+              >
+                <RotateCcw className="w-4 h-4 mr-1" /> Reset
+              </button>
+            )}
           </div>
         </div>
 
@@ -115,8 +135,14 @@ Aksesibilitas: ${item.accessibility}
               <tbody className="divide-y divide-gray-200 text-sm">
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-gray-500">
-                      Tidak ada destinasi yang cocok dengan kriteria pencarian.
+                    <td colSpan="6" className="py-12 text-center text-gray-500">
+                      <p className="font-semibold text-gray-700 mb-1">Tidak ada objek wisata ditemukan untuk filter ini.</p>
+                      <button
+                        onClick={() => { setSearchTerm(''); setFilterRegion('all'); setFilterType('all'); }}
+                        className="text-xs text-emerald-600 font-bold underline mt-2"
+                      >
+                        Reset pencarian & tampilkan semua data
+                      </button>
                     </td>
                   </tr>
                 ) : (
@@ -137,7 +163,7 @@ Aksesibilitas: ${item.accessibility}
                         </div>
                         <div className="text-xs text-gray-500 flex items-center mt-1">
                           <MapPin className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                          {item.province}
+                          {item.regionName} • {item.province}
                         </div>
                         <span className="inline-block mt-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-700">
                           {item.type} • {item.elevation}
